@@ -7,34 +7,42 @@ import openai
 ########## ENV LOAD ##########
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-PORT = int(os.getenv("PORT", 5000))
 GALLABOX_API_KEY = os.getenv("GALLABOX_API_KEY", "")
 GALLABOX_API_SECRET = os.getenv("GALLABOX_API_SECRET", "")
 GALLABOX_CHANNEL_ID = os.getenv("GALLABOX_CHANNEL_ID", "")
 GALLABOX_API_URL = "https://backend.gallabox.com/api/v1/messages/whatsapp"
 
-if OPENAI_API_KEY:
-    openai.api_key = OPENAI_API_KEY
-else:
-    print("⚠️  OpenAI API key not found")
-
 app = Flask(__name__)
 
+########## BASIC CHECK ##########
+if not OPENAI_API_KEY:
+    print("⚠️  Missing OPENAI_API_KEY")
+if not GALLABOX_API_KEY or not GALLABOX_API_SECRET or not GALLABOX_CHANNEL_ID:
+    print("⚠️  Missing Gallabox credentials")
+
 ########## PERSISTENCE ##########
-CONV_FILE = Path("conversations.json")
+CONV_FILE = Path("/tmp/conversations.json")  # ✅ Use /tmp for Vercel write access
 if CONV_FILE.exists():
     conversations = json.loads(CONV_FILE.read_text())
 else:
     conversations = {}
 
 def save_files():
-    CONV_FILE.write_text(json.dumps(conversations, indent=2))
+    try:
+        CONV_FILE.write_text(json.dumps(conversations, indent=2))
+    except Exception as e:
+        print(f"⚠️ Could not save conversations: {e}")
 
 ########## ZULU CLUB INFO ##########
 ZULU_CLUB_INFO = """
+We're building a new way to shop and discover lifestyle products online.
+
+We all love visiting a premium store — exploring new arrivals, discovering chic home pieces, finding stylish outfits, or picking adorable toys for kids. But we know making time for mall visits isn't always easy.
+
 Introducing Zulu Club — your personalized lifestyle shopping experience, delivered right to your doorstep.
 
-Browse and shop high-quality lifestyle products:
+Browse and shop high-quality lifestyle products across categories you love:
+
 - Women's Fashion — dresses, tops, co-ords, winterwear, loungewear & more
 - Men's Fashion — shirts, tees, jackets, athleisure & more
 - Kids — clothing, toys, learning kits & accessories
@@ -44,7 +52,8 @@ Browse and shop high-quality lifestyle products:
 - Fashion Accessories — bags, jewelry, watches, sunglasses & belts
 - Lifestyle Gifting — curated gift sets & décor-based gifting
 
-Your selection arrives in just 100 minutes. Try at home, keep what you love, return instantly.
+Your selection arrives in just 100 minutes. Try at home, keep what you love, return instantly — smooth, personal, and stress-free.
+
 Now live in Gurgaon — Visit zulu.club or our pop-ups at AIPL Joy Street & AIPL Central.
 """
 
@@ -61,13 +70,13 @@ Use ONLY the following information:
 {company_info}
 
 Guidelines:
-1. Be helpful, concise, and friendly.
-2. Highlight 100-minute delivery, try-at-home, easy returns, and premium curation.
-3. If someone says hi/hello, greet them warmly and introduce Zulu Club.
-4. If they ask about products, use the product category logic to show them.
-5. If something is not in the info, politely say you’re not sure.
-6. Mention we're available in Gurgaon and at pop-ups: AIPL Joy Street & AIPL Central.
-7. Never invent details beyond the provided info.
+- Be helpful, concise, and friendly.
+- Highlight 100-minute delivery, try-at-home, easy returns, and premium curation.
+- If someone says hi/hello, greet them warmly and introduce Zulu Club.
+- If they ask about products, use the product category logic to show them.
+- If something is not in the info, politely say you’re not sure.
+- Mention we're available in Gurgaon and at pop-ups: AIPL Joy Street & AIPL Central.
+- Never invent details beyond the provided info.
 """
 
         messages = [{"role": "system", "content": system_message}]
@@ -117,6 +126,8 @@ def _load_products():
         _category_index.setdefault(key, []).append(p)
     print(f"✅ Loaded {len(_products)} products across {len(_categories)} categories.")
 
+_load_products()
+
 def detect_category_with_gpt(user_message):
     try:
         if not _categories:
@@ -149,45 +160,6 @@ def get_random_products(cat, n=3):
     items = _category_index.get(cat, [])
     return random.sample(items, min(n, len(items))) if items else []
 
-_load_products()
-
-########## SEND WHATSAPP ##########
-def send_whatsapp_message(phone, message_text):
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": GALLABOX_API_KEY,
-        "x-api-secret": GALLABOX_API_SECRET
-    }
-    payload = {
-        "channelId": GALLABOX_CHANNEL_ID,
-        "to": phone,
-        "type": "text",
-        "message": {"text": message_text}
-    }
-    try:
-        r = requests.post(GALLABOX_API_URL, headers=headers, json=payload)
-        print("📤 Gallabox text response:", r.status_code, r.text)
-    except Exception as e:
-        print(f"❌ Gallabox text send error: {e}")
-
-def send_whatsapp_image(phone, image_url, caption):
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": GALLABOX_API_KEY,
-        "x-api-secret": GALLABOX_API_SECRET
-    }
-    payload = {
-        "channelId": GALLABOX_CHANNEL_ID,
-        "to": phone,
-        "type": "image",
-        "message": {"image": image_url, "caption": caption}
-    }
-    try:
-        r = requests.post(GALLABOX_API_URL, headers=headers, json=payload)
-        print("📤 Gallabox image response:", r.status_code, r.text)
-    except Exception as e:
-        print(f"❌ Gallabox image send error: {e}")
-
 ########## MESSAGE HANDLER ##########
 def handle_message(session_id, msg):
     msgl = msg.lower().strip()
@@ -208,46 +180,27 @@ def handle_message(session_id, msg):
     save_files()
     return {"type": "text", "content": reply}
 
-########## GALLABOX WEBHOOK ##########
-@app.route("/api/gallabox_webhook", methods=["POST"])
-def gallabox_webhook():
-    """Handle WhatsApp messages via Gallabox"""
-    try:
-        data = request.get_json(force=True)
-        print("📩 Received Gallabox message:", data)
-
-        user_phone = data.get("data", {}).get("from", "unknown")
-        user_message = data.get("data", {}).get("message", {}).get("text", "").strip()
-
-        if not user_message:
-            send_whatsapp_message(user_phone, "Hi 👋! Welcome to Zulu Club — your premium lifestyle shopping destination!")
-            return jsonify({"status": "ok"})
-
-        response = handle_message(user_phone, user_message)
-
-        if response["type"] == "text":
-            send_whatsapp_message(user_phone, response["content"])
-
-        elif response["type"] == "products":
-            send_whatsapp_message(user_phone, f"Here are some picks from our *{response['category'].title()}* collection 💫")
-            for item in response["items"]:
-                send_whatsapp_image(user_phone, item["image_url"], f"{item['name']} — {item['price']}\nAvailable on zulu.club ✨")
-
-        else:
-            send_whatsapp_message(user_phone, "Hey there 👋! Welcome to Zulu Club!")
-
-        return jsonify({"status": "sent"}), 200
-
-    except Exception as e:
-        print(f"❌ Gallabox Webhook Error: {e}")
-        return jsonify({"status": "error", "message": str(e)}), 200
-
-########## HEALTH CHECK ##########
+########## ROUTES ##########
 @app.route("/api/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "ok", "message": "Zulu Club Chat Assistant is running on Vercel!"})
 
-########## VERCEL ENTRY ##########
-def handler(request):
-    with app.request_context(request.environ):
-        return app.full_dispatch_request()
+@app.route("/api/gallabox_webhook", methods=["POST"])
+def gallabox_webhook():
+    try:
+        data = request.get_json(force=True)
+        print("📩 Received Gallabox message:", data)
+        user_phone = data.get("data", {}).get("from", "unknown")
+        user_message = data.get("data", {}).get("message", {}).get("text", "").strip()
+        if not user_message:
+            return jsonify({"status": "ok", "message": "Empty message received."})
+
+        response = handle_message(user_phone, user_message)
+        return jsonify(response), 200
+    except Exception as e:
+        print(f"❌ Gallabox Webhook Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+########## EXPORT HANDLER FOR VERCEL ##########
+# ✅ This is what Vercel looks for
+handler = app

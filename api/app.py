@@ -202,5 +202,13 @@ def gallabox_webhook():
         return jsonify({"error": str(e)}), 500
 
 ########## EXPORT HANDLER FOR VERCEL ##########
-# ✅ This is what Vercel looks for
+# ===== DO NOT RUN FLASK LOCALLY IN VERCEL =====
+# Just expose the Flask instance for Vercel.
+
+# Vercel expects a callable named "app" or "handler"
+# so we explicitly assign it here:
 handler = app
+
+# Optional: add a startup log (won't crash if run in Vercel)
+print("✅ Zulu Club Chat Assistant handler loaded successfully in Vercel")
+

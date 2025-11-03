@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Zulu Club Setup</title>
+  <style>
+    body{font-family:Arial;background:#fafafa;color:#333;padding:40px;}
+    form{background:white;padding:20px;border-radius:10px;max-width:420px;margin:auto;box-shadow:0 2px 8px rgba(0,0,0,.1);}
+    label{font-weight:bold;display:block;margin-top:10px;}
+    input{width:100%;padding:8px;margin-top:6px;border:1px solid #ccc;border-radius:6px;}
+    button{margin-top:20px;background:#111;color:#fff;padding:10px 16px;border:none;border-radius:6px;cursor:pointer;}
+    .saved{color:green;text-align:center;margin-bottom:10px;}
+  </style>
+</head>
+<body>
+  <form method="post">
+    <h2>Zulu Club API Setup</h2>
+    {% if saved %}<p class="saved">✅ Keys Saved! You can now use Gallabox Webhook.</p>{% endif %}
+    <label>OpenAI API Key</label><input name="OPENAI_API_KEY" required>
+    <label>Gallabox API Key</label><input name="GALLABOX_API_KEY" required>
+    <label>Gallabox API Secret</label><input name="GALLABOX_API_SECRET" required>
+    <label>Gallabox Channel ID</label><input name="GALLABOX_CHANNEL_ID" required>
+    <button type="submit">Save Keys</button>
+  </form>
+</body>
+</html>
